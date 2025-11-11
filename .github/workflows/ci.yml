@@ -175,6 +175,29 @@ jobs:
         working-directory: halligan
         run: pixi install
 
+      - name: Download models
+        working-directory: halligan
+        run: |
+          # Ensure unzip is available (usually pre-installed on Ubuntu)
+          which unzip || (echo "unzip not found, installing..." && sudo apt-get update && sudo apt-get install -y unzip)
+          # Download and setup models
+          # The script will use cache if available and extract models to halligan/models
+          bash get_models.sh
+          # Verify models directory exists and contains model files
+          if [ ! -d "halligan/models" ]; then
+            echo "Error: halligan/models directory not found after download"
+            exit 1
+          fi
+          # List contents for debugging
+          echo "Models directory contents:"
+          ls -la halligan/models/ || true
+          # Check if __init__.py exists
+          if [ -f "halligan/models/__init__.py" ]; then
+            echo "✓ __init__.py exists"
+          else
+            echo "Warning: __init__.py not found in models directory"
+          fi
+
       - name: Start benchmark and run integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
