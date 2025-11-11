@@ -214,12 +214,16 @@ jobs:
           # Try to install CLIP package
           # First, try installing without dependencies (torch/torchvision should already be in pixi env)
           if pixi run pip install --no-cache-dir --no-deps git+https://github.com/openai/CLIP.git 2>/dev/null; then
+            echo "✓ CLIP package installed (without deps)"
+            # Install CLIP's required dependencies (excluding torch/torchvision which are already in pixi env)
+            echo "Installing CLIP dependencies: ftfy, regex, tqdm..."
+            pixi run pip install --no-cache-dir ftfy regex tqdm || echo "Warning: Some CLIP dependencies may have failed to install"
             echo "CLIP_INSTALLED=1" >> $GITHUB_ENV
-            echo "✓ CLIP package installed successfully (without deps)"
+            echo "✓ CLIP package and dependencies installed successfully"
           # If that fails, try with dependencies but without cache
           elif pixi run pip install --no-cache-dir git+https://github.com/openai/CLIP.git; then
             echo "CLIP_INSTALLED=1" >> $GITHUB_ENV
-            echo "✓ CLIP package installed successfully"
+            echo "✓ CLIP package installed successfully (with all deps)"
           else
             echo "CLIP_INSTALLED=0" >> $GITHUB_ENV
             echo "Warning: Failed to install CLIP, some tests may be skipped"
