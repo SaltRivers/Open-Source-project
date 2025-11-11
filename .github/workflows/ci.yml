@@ -201,8 +201,29 @@ jobs:
       - name: Install CLIP package (for model tests)
         working-directory: halligan
         run: |
-          # Install clip package via pip for downloaded model tests
-          pixi run pip install git+https://github.com/openai/CLIP.git || echo "Warning: Failed to install CLIP, some tests may be skipped"
+          # Clean up disk space before installing CLIP
+          echo "Cleaning up disk space..."
+          pixi run pip cache purge || true
+          # Clean temporary files
+          rm -rf /tmp/pip-* /tmp/*.whl /tmp/*.tar.gz 2>/dev/null || true
+          # Clean conda/pixi cache if possible
+          conda clean --all -y || true
+          # Check available disk space
+          df -h / || true
+          
+          # Try to install CLIP package
+          # First, try installing without dependencies (torch/torchvision should already be in pixi env)
+          if pixi run pip install --no-cache-dir --no-deps git+https://github.com/openai/CLIP.git 2>/dev/null; then
+            echo "CLIP_INSTALLED=1" >> $GITHUB_ENV
+            echo "✓ CLIP package installed successfully (without deps)"
+          # If that fails, try with dependencies but without cache
+          elif pixi run pip install --no-cache-dir git+https://github.com/openai/CLIP.git; then
+            echo "CLIP_INSTALLED=1" >> $GITHUB_ENV
+            echo "✓ CLIP package installed successfully"
+          else
+            echo "CLIP_INSTALLED=0" >> $GITHUB_ENV
+            echo "Warning: Failed to install CLIP, some tests may be skipped"
+          fi
 
       - name: Start benchmark and run integration tests
         env:
@@ -240,7 +261,13 @@ jobs:
 
           # Run integration tests
           mkdir -p test-results
-          pixi run pytest -m integration --junitxml=test-results/junit-integration.xml -vv || TEST_STATUS=$?
+          # If CLIP is not installed, skip CLIP-related test directories
+          if [ "${CLIP_INSTALLED:-0}" != "1" ]; then
+            echo "Skipping CLIP-related tests due to installation failure"
+            pixi run pytest -m integration --ignore=models/CLIP/tests --junitxml=test-results/junit-integration.xml -vv || TEST_STATUS=$?
+          else
+            pixi run pytest -m integration --junitxml=test-results/junit-integration.xml -vv || TEST_STATUS=$?
+          fi
 
           # Dump server logs for context on failure
           if [ "${TEST_STATUS:-0}" != "0" ]; then
