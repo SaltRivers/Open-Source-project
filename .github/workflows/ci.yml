@@ -198,6 +198,12 @@ jobs:
             echo "Warning: __init__.py not found in models directory"
           fi
 
+      - name: Install CLIP package (for model tests)
+        working-directory: halligan
+        run: |
+          # Install clip package via pip for downloaded model tests
+          pixi run pip install git+https://github.com/openai/CLIP.git || echo "Warning: Failed to install CLIP, some tests may be skipped"
+
       - name: Start benchmark and run integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
@@ -207,10 +213,19 @@ jobs:
           # Start benchmark server in background, fully detached from this shell
           (setsid pixi run waitress-serve --listen=0.0.0.0:3334 benchmark.server:app > /tmp/benchmark.out 2>&1 & echo $! > /tmp/benchmark.pid) || true
 
+          # Give server a moment to start before first health check
+          sleep 3
+
           # Wait for benchmark health
           for i in {1..90}; do
-            if curl -fsS http://127.0.0.1:3334/health | grep -q '"status":"ok"'; then
+            if curl -fsS http://127.0.0.1:3334/health 2>/dev/null | grep -q '"status":"ok"'; then
+              echo "Benchmark server is healthy"
               break
+            fi
+            if [ $i -eq 90 ]; then
+              echo "Benchmark server failed to start after 180 seconds"
+              if [ -f /tmp/benchmark.out ]; then tail -200 /tmp/benchmark.out || true; fi
+              exit 1
             fi
             sleep 2
           done
