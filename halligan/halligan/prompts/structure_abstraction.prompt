@@ -9,16 +9,25 @@ ${relations}
 Objective: 
 ${objective}
 
-Write a Python script `def structure_abstraction(frames: list[Frame])` to identify 
-all element/frame-level interactables using these tools:
+Return a single JSON object that identifies all element/frame-level interactables.
 
-${tool_docs}
+Output JSON schema:
+{
+  "actions": [
+    {"type": "set_frame",   "frame": 0, "interactable": "POINTABLE"},
+    {"type": "split_frame", "frame": 0, "rows": 3, "columns": 3, "mark_as": "SELECTABLE"},
+    {"type": "grid_frame",  "frame": 0, "tiles": 16, "mark_as": "SWAPPABLE"},
+    {"type": "get_element", "frame": 0, "position": "left", "details": "blue submit button", "mark_as": "NEXT"}
+  ]
+}
 
 ## Guidelines
+0. Output MUST be valid JSON. Do not wrap it in markdown fences. Do not include any other text.
 1. Use NEXT only when a submit or skip button (either text or icon) is present. If neither is found, omit NEXT.
 2. Ensure there is either zero or one NEXT, while maintaining exactly one other interactable type.
 3. Treat the dependent frame in a relationship as non-interactable.
 4. Prioritize extracting all interactables over solving the task.
 5. Choose either interactable frames or elements, but stick to one type for consistency.
 6. Ensure that frames are only marked with frame interactable types, and elements are only marked with element interactable types.
-7. When using split() and grid(), remember to mark the subframes/elements as interactables.
+7. When using split_frame/grid_frame, you must mark the produced subframes/elements via `mark_as`.
+8. Allowed `position` values: "up", "down", "left", "right", "all".

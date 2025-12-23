@@ -166,23 +166,17 @@ def test_captchas(captcha, sample_id):
 
 
 @pytest.mark.integration
-def test_halligan():
+def test_models_initialize_integration():
     """
-    Verify that Halligan's VLM agent and all the additional models (CLIP, FastSAM, DINOv2)
-    can be successfully initialized.
+    Verify that Halligan's additional models (CLIP, FastSAM, DINOv2) can be initialized.
+
+    Note: GPTAgent construction is covered by a unit test (does not require network).
     """
-    from halligan.agents import GPTAgent
     try:
         from halligan.models import CLIP, Segmenter, Detector
     except Exception:
         pytest.skip("halligan.models components (CLIP/Segmenter/Detector) are not available; skipping.")
 
-    if not OPENAI_API_KEY:
-        pytest.skip("OPENAI_API_KEY is not set; skipping model initialization test.")
-
-    agent = GPTAgent(api_key=OPENAI_API_KEY)
-    assert agent is not None, "Failed to initialize GPTAgent."
-    
     clip = CLIP()
     assert clip is not None, "Failed to initialize CLIP"
 

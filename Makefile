@@ -2,22 +2,22 @@
 .PHONY: install format lint typecheck test precommit up down models
 
 install:
-	pixi -p ./halligan install
+	cd halligan && pixi install
 
 format:
-	pixi -p ./halligan run format
+	cd halligan && pixi run format
 
 lint:
-	pixi -p ./halligan run lint
+	cd halligan && pixi run lint
 
 typecheck:
-	pixi -p ./halligan run typecheck
+	cd halligan && pixi run typecheck
 
 test:
-	pixi -p ./halligan run test
+	cd halligan && pixi run test
 
 precommit:
-	pixi -p ./halligan run precommit
+	cd halligan && pixi run precommit
 
 up:
 	docker compose up -d --build

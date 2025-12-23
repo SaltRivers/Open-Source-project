@@ -1,11 +1,11 @@
-import re
-import inspect
-
 import halligan.prompts as Prompts
 from halligan.agents import Agent
 from halligan.utils.layout import Frame
 from halligan.utils.constants import Stage
 from halligan.utils.logger import Trace
+from halligan.runtime.parser import parse_json_from_response
+from halligan.runtime.schemas import validate_stage1
+from halligan.runtime.errors import ParseError, ValidationError
 
 
 stage = Stage.OBJECTIVE_IDENTIFICATION
@@ -24,45 +24,40 @@ def objective_identification(agent: Agent, frames: list[Frame]) -> str:
     Returns:
         objective (str): The inferred task objective.
     """
-    task_objective: str = ""
-
-    def get_script(response: str) -> str:
-        pattern = r"```python(.*?)```"
-        blocks = re.findall(pattern, response, re.DOTALL)
-        return "".join(blocks)
-        
-    def describe(frame_id: int, description: str):
-        frames[frame_id].description = description
-
-    def relate(frame_id1: int, frame_id2: int = None, relationship: str = ""):
-        frames[frame_id1].relations[frame_id2] = relationship
-
-    def objective(description: str):
-        nonlocal task_objective
-        task_objective = description
-
-    # Prepare tools
-    tools = {"describe": describe, "relate": relate, "objective": objective}
-
     # Prepare prompt
     prompt = Prompts.get(
         stage=stage,
-        tools="\n".join(
-            f"{func.__name__}{inspect.signature(func)}"
-            for func in tools.values()
-        ),
         frames=len(frames)
     )
     print(prompt)
 
-    # Request script from agent
+    # Request structured JSON from agent
     images = [frame.image for frame in frames]
     image_captions = [f"Frame {i}" for i in range(len(frames))]
-    response, _ = agent(prompt, images, image_captions)
-    script = get_script(response)
-    print(script)
+    last_error: Exception | None = None
+    for attempt in range(3):
+        response, _ = agent(prompt, images, image_captions)
+        try:
+            data = parse_json_from_response(response)
+            result = validate_stage1(data, frames=len(frames))
 
-    # Execute response script
-    exec(script, tools, {})
+            for i, desc in enumerate(result.descriptions):
+                frames[i].description = desc
+
+            for rel in result.relations:
+                frames[rel.src].relations[rel.dst] = rel.relationship
+
+            agent.reset()
+            return result.objective
+
+        except (ParseError, ValidationError) as exc:
+            last_error = exc
+            prompt = (
+                "Your previous output was invalid.\n"
+                f"Error: {exc}\n\n"
+                "Please output ONLY valid JSON that matches the required schema.\n"
+                "Do not include markdown fences or any extra text."
+            )
+
     agent.reset()
-    return task_objective
+    raise last_error if last_error else RuntimeError("Stage 1 failed without a captured error")

@@ -11,6 +11,8 @@ from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Page
 
 import halligan.utils.action_tools as action_tools
+from halligan.runtime.config import RuntimeConfig
+from halligan.runtime.errors import UnsafeTargetError
 from samples import SAMPLES
 from halligan.agents import GPTAgent
 from halligan.utils.logger import Trace
@@ -47,6 +49,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 def validate_environment() -> None:
     """Ensure required environment variables are present and well-formed."""
     errors = []
+
+    # Enforce safer defaults: only allow local benchmark endpoints unless explicitly overridden.
+    try:
+        RuntimeConfig.from_env().validate()
+    except UnsafeTargetError as exc:
+        errors.append(str(exc))
 
     if not BROWSER_URL:
         errors.append(

@@ -9,7 +9,7 @@ services:
   browser:
     image: mcr.microsoft.com/playwright:v1.52.0-noble
     ports:
-      - "5000:5000"
+      - "5001:5000"
     init: true
     extra_hosts:
       - "host.docker.internal:host-gateway"

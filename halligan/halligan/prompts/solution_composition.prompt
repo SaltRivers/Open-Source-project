@@ -1,5 +1,5 @@
 Solve tasks using your vision, coding, and language skills.
-When using code, the user cannot provide any other feedback or perform any other action beyond executing the code you suggest. The user can't modify your code. So do not suggest incomplete code which requires users to modify. Don't use a code block if it's not intended to be executed by the user.
+You MUST output a restricted JSON program (no Python code).
 
 ## Objective
 ${objective}
@@ -7,18 +7,37 @@ ${objective}
 ## Frame Relationships
 ${relations}
 
-Compose a Python script solution. Example:
+Compose a JSON program solution. Examples:
 ${examples}
 
-You can perform these actions:
+You can invoke these tools by name via the JSON `call` operation:
 ${action_tools}
 
-You can use these tools in the Python script to help you:
+You can use these vision tools via the JSON `call` operation:
 ${vision_tools}
 
 ## Guidelines
-1. You can provide the answer for math and text challenges without using tools.
-2. You are only allowed to use to given tools rather than importing new tools.
-3. Compose the solution without referencing the possible answer in the objective (e.g., flowers -> icon).
-4. You should implement all placeholders. 
-5. Exact match (==) is illegal because there are error and variance in the tools.
+0. Output MUST be valid JSON. Do not wrap it in markdown fences. Do not include any other text.
+1. JSON schema (program):
+   {
+     "steps": [
+       {"op": "call", "tool": "click", "args": {"target": {"ref": "interactable", "frame": 0, "id": 0}}},
+       {"op": "call_method", "target": {"var": "choice"}, "method": "select"},
+       {"op": "assign", "var": "x", "value": 1},
+       {"op": "foreach", "var": "choice", "in": {"var": "choices"}, "do": [ ... ]},
+       {"op": "if", "cond": true, "then": [ ... ], "else": [ ... ]},
+       {"op": "break"}
+     ]
+   }
+2. References you can use in expressions:
+   - {"ref":"frame","id":N} -> Frame N
+   - {"ref":"interactable","frame":N,"id":K} -> frames[N].get_interactable(K)
+   - {"ref":"keypoint","frame":N,"id":K} -> frames[N].get_keypoint(K)
+   - {"ref":"neighbour","point":<expr>,"id":K} -> point.get_neighbour(K)
+   - {"ref":"attr","obj":<expr>,"name":"image"} -> obj.image (property access)
+   - {"ref":"index","list":<expr>,"index":<expr>} -> list[index]
+   - {"op":"map_attr","list":<expr>,"attr":"image"} -> [x.image for x in list]
+   - {"op":"filter_mask","items":<expr>,"mask":<expr>} -> filter items by boolean mask
+   - {"op":"len","value":<expr>} / {"op":"sum","value":<expr>}
+3. Do NOT import modules or output executable Python code.
+4. Do not reference the possible answer in the objective (e.g., flowers -> icon).

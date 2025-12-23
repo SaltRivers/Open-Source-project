@@ -56,17 +56,9 @@ jobs:
           cache: false
           run-install: false
 
-      - name: Restore models cache
-        uses: actions/cache/restore@v4
-        with:
-          path: halligan/.cache/models
-          key: models-${{ hashFiles('halligan/get_models.sh') }}
-          restore-keys: |
-            models-
-
       - name: Install deps (CPU)
         working-directory: halligan
-        run: pixi install
+        run: pixi install --locked --frozen
 
       - name: Run pre-commit (apply fixes)
         working-directory: halligan
@@ -76,27 +68,15 @@ jobs:
         working-directory: halligan
         run: pixi run precommit
 
+      - name: Ensure no unstaged changes after formatting
+        run: git diff --exit-code
+
       - name: Run unit tests (skip integration) with JUnit
         working-directory: halligan
         run: |
           mkdir -p test-results
           pixi run pytest -m 'not integration' --junitxml=test-results/junit.xml -vv
         continue-on-error: false
-
-      - name: Save models cache
-        if: always() && steps.models_dir.outputs.present == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: halligan/.cache/models
-          key: models-${{ hashFiles('halligan/get_models.sh') }}
-
-      - name: Check models dir exists
-        id: models_dir
-        if: always()
-        run: |
-          if [ -d halligan/.cache/models ]; then
-            echo "present=true" >> $GITHUB_OUTPUT
-          fi
 
       - name: Upload test results
         if: failure()
@@ -132,28 +112,40 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Start Playwright browser container only
+      - name: Start benchmark + browser services
         run: |
-          docker compose up -d --build browser
-          # Allow browser to warm up
+          docker compose up -d --build benchmark browser
+          # Allow services to warm up
           sleep 5
 
       - name: Export service endpoints
         run: |
-          echo "BROWSER_URL=ws://127.0.0.1:5000/" >> $GITHUB_ENV
+          # Host port is 5001 (see docker-compose.yml: "5001:5000")
+          echo "BROWSER_URL=ws://127.0.0.1:5001/" >> $GITHUB_ENV
+          # NOTE: `BENCHMARK_URL` is loaded inside the *browser container* (page.goto),
+          # so it must be reachable from Docker. `host.docker.internal` is injected
+          # via extra_hosts in docker-compose.yml.
           echo "BENCHMARK_URL=http://host.docker.internal:3334" >> $GITHUB_ENV
           echo "BENCHMARK_HTTP_URL=http://127.0.0.1:3334" >> $GITHUB_ENV
 
       - name: Wait for browser health
         run: |
+          # Wait for benchmark first (host reachable)
           for i in {1..60}; do
-            if bash -c "</dev/tcp/127.0.0.1/5000" 2>/dev/null; then
+            if curl -fsS http://127.0.0.1:3334/health 2>/dev/null | grep -q '"status"'; then
+              break
+            fi
+            sleep 2
+          done
+
+          for i in {1..60}; do
+            if bash -c "</dev/tcp/127.0.0.1/5001" 2>/dev/null; then
               exit 0
             fi
             sleep 2
           done
-          echo "Browser not healthy (TCP 5000 not accepting connections)" >&2
-          docker compose logs browser || true
+          echo "Browser not healthy (TCP 5001 not accepting connections)" >&2
+          docker compose logs benchmark browser || true
           exit 1
 
       - name: Set up Pixi (with cache)
@@ -163,137 +155,24 @@ jobs:
           cache: false
           run-install: false
 
-      - name: Restore models cache
-        uses: actions/cache/restore@v4
-        with:
-          path: halligan/.cache/models
-          key: models-${{ hashFiles('halligan/get_models.sh') }}
-          restore-keys: |
-            models-
-
       - name: Install deps (CPU)
         working-directory: halligan
-        run: pixi install
+        run: pixi install --locked --frozen
 
-      - name: Download models
-        working-directory: halligan
-        run: |
-          # Ensure unzip is available (usually pre-installed on Ubuntu)
-          which unzip || (echo "unzip not found, installing..." && sudo apt-get update && sudo apt-get install -y unzip)
-          # Download and setup models
-          # The script will use cache if available and extract models to halligan/models
-          bash get_models.sh
-          # Verify models directory exists and contains model files
-          if [ ! -d "halligan/models" ]; then
-            echo "Error: halligan/models directory not found after download"
-            exit 1
-          fi
-          # List contents for debugging
-          echo "Models directory contents:"
-          ls -la halligan/models/ || true
-          # Check if __init__.py exists
-          if [ -f "halligan/models/__init__.py" ]; then
-            echo "✓ __init__.py exists"
-          else
-            echo "Warning: __init__.py not found in models directory"
-          fi
-
-      - name: Install CLIP package (for model tests)
-        working-directory: halligan
-        run: |
-          # Clean up disk space before installing CLIP
-          echo "Cleaning up disk space..."
-          pixi run pip cache purge || true
-          # Clean temporary files
-          rm -rf /tmp/pip-* /tmp/*.whl /tmp/*.tar.gz 2>/dev/null || true
-          # Clean conda/pixi cache if possible
-          conda clean --all -y || true
-          # Check available disk space
-          df -h / || true
-          
-          # Try to install CLIP package
-          # First, try installing without dependencies (torch/torchvision should already be in pixi env)
-          if pixi run pip install --no-cache-dir --no-deps git+https://github.com/openai/CLIP.git 2>/dev/null; then
-            echo "✓ CLIP package installed (without deps)"
-            # Install CLIP's required dependencies (excluding torch/torchvision which are already in pixi env)
-            echo "Installing CLIP dependencies: ftfy, regex, tqdm..."
-            pixi run pip install --no-cache-dir ftfy regex tqdm || echo "Warning: Some CLIP dependencies may have failed to install"
-            echo "CLIP_INSTALLED=1" >> $GITHUB_ENV
-            echo "✓ CLIP package and dependencies installed successfully"
-          # If that fails, try with dependencies but without cache
-          elif pixi run pip install --no-cache-dir git+https://github.com/openai/CLIP.git; then
-            echo "CLIP_INSTALLED=1" >> $GITHUB_ENV
-            echo "✓ CLIP package installed successfully (with all deps)"
-          else
-            echo "CLIP_INSTALLED=0" >> $GITHUB_ENV
-            echo "Warning: Failed to install CLIP, some tests may be skipped"
-          fi
-
-      - name: Start benchmark and run integration tests
+      - name: Run integration tests
         env:
           PYTHONPATH: ${{ github.workspace }}
         working-directory: halligan
         run: |
           set -euo pipefail
-          # Start benchmark server in background, fully detached from this shell
-          (setsid pixi run waitress-serve --listen=0.0.0.0:3334 benchmark.server:app > /tmp/benchmark.out 2>&1 & echo $! > /tmp/benchmark.pid) || true
-
-          # Give server a moment to start before first health check
-          sleep 3
-
-          # Wait for benchmark health
-          for i in {1..90}; do
-            if curl -fsS http://127.0.0.1:3334/health 2>/dev/null | grep -q '"status":"ok"'; then
-              echo "Benchmark server is healthy"
-              break
-            fi
-            if [ $i -eq 90 ]; then
-              echo "Benchmark server failed to start after 180 seconds"
-              if [ -f /tmp/benchmark.out ]; then tail -200 /tmp/benchmark.out || true; fi
-              exit 1
-            fi
-            sleep 2
-          done
-
-          # Final health check with diagnostics
-          if ! curl -fsS http://127.0.0.1:3334/health | grep -q '"status":"ok"'; then
-            echo "Benchmark not healthy before tests" >&2
-            curl -v http://127.0.0.1:3334/health || true
-            if [ -f /tmp/benchmark.out ]; then tail -200 /tmp/benchmark.out || true; fi
-            exit 1
-          fi
-
-          # Run integration tests
           mkdir -p test-results
-          # If CLIP is not installed, skip CLIP-related test directories
-          if [ "${CLIP_INSTALLED:-0}" != "1" ]; then
-            echo "Skipping CLIP-related tests due to installation failure"
-            pixi run pytest -m integration --ignore=models/CLIP/tests --junitxml=test-results/junit-integration.xml -vv || TEST_STATUS=$?
-          else
-            pixi run pytest -m integration --junitxml=test-results/junit-integration.xml -vv || TEST_STATUS=$?
-          fi
+          pixi run pytest -m integration --junitxml=test-results/junit-integration.xml -vv || TEST_STATUS=$?
 
-          # Dump server logs for context on failure
           if [ "${TEST_STATUS:-0}" != "0" ]; then
-            echo "Integration tests failed; tailing benchmark logs" >&2
-            if [ -f /tmp/benchmark.out ]; then tail -200 /tmp/benchmark.out || true; fi
+            echo "Integration tests failed; dumping docker compose logs" >&2
+            docker compose logs benchmark browser || true
             exit "$TEST_STATUS"
           fi
-
-      - name: Check models dir exists (integration)
-        id: models_dir_integ
-        if: always()
-        run: |
-          if [ -d halligan/.cache/models ]; then
-            echo "present=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Save models cache (integration)
-        if: always() && steps.models_dir_integ.outputs.present == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: halligan/.cache/models
-          key: models-${{ hashFiles('halligan/get_models.sh') }}
 
       - name: Upload integration results
         if: always()
@@ -302,3 +181,7 @@ jobs:
           name: test-results-integration
           path: halligan/test-results
           if-no-files-found: ignore
+
+      - name: Tear down services
+        if: always()
+        run: docker compose down -v

@@ -1,16 +1,16 @@
-import re
-import ast
-from textwrap import indent
-
 import halligan.prompts as Prompts
 import halligan.utils.examples as Examples
 from halligan.agents import Agent
 from halligan.utils.logger import Trace
 from halligan.utils.constants import Stage
 from halligan.utils.constants import InteractableElement
-from halligan.utils.action_tools import action_toolkits
-from halligan.utils.vision_tools import vision_toolkits
 from halligan.utils.layout import Frame, get_observation
+from halligan.runtime.parser import parse_json_from_response
+from halligan.runtime.schemas import validate_stage3
+from halligan.runtime.registry import build_default_registry
+from halligan.runtime.executor import execute_stage3_program
+from halligan.runtime.errors import ParseError, ValidationError, ToolError
+import halligan.utils.vision_tools as vision_tools
 
 
 stage = Stage.SOLUTION_COMPOSITION
@@ -21,50 +21,40 @@ def solution_composition(agent: Agent, frames: list[Frame], objective: str) -> N
     """
     Agent composes a Python executable solution using vision and action tools.
     """
-    def get_script(response: str) -> list[str]:
-        pattern = r"```python(.*?)```"
-        blocks = re.findall(pattern, response, re.DOTALL)
-        code = "\n".join(blocks)
-    
-        result = ""
-        node = ast.parse(code)
-        for elem in node.body:
-            if isinstance(elem, ast.FunctionDef) and elem.name == "solve":
-                result = ast.unparse(elem)
-                break
-            
-        return result
-    
-    def execute_script(script: str, dependencies: dict):
-        if "==" in script:
-            raise ValueError("Exact match (==) is illegal, you must find the closest, best possible answer.")
-        
-        if "get_keypoint" in script and "get_neighbour" not in script:
-            raise ValueError("You must narrow down the keypoint search space with get_neighbour()")
-        
-        env = {}
-        exec(script, dependencies, env)
-        env["solve"](all_frames)
-    
     examples = []
-    dependencies = {}
-    action_tool_docs, vision_tool_docs = {}, {}
     all_frames, images, image_captions, descriptions, relations, interactable_types = get_observation(frames)
     
     for interactable_type in interactable_types:
-        # Prepare action and vision tools based on interactables
-        for (toolkits, docs) in [(action_toolkits, action_tool_docs), (vision_toolkits, vision_tool_docs)]:
-            toolkit = toolkits.get(interactable_type)
-            if toolkit:
-                docs.update({
-                    f"{tool.owner}.{tool.name}" if tool.owner else tool.name: tool.docs 
-                    for tool in toolkit.tools
-                })
-                dependencies.update(toolkit.dependencies)
-
         # Prepare in-context learning examples
         if interactable_type == InteractableElement.NEXT.name: continue
         else: examples.append(Examples.get(interactable_type))
+
+    # Tools exposed to the JSON program (functions only)
+    registry = build_default_registry()
+    action_tools = "\n".join(
+        [
+            "- click(target)",
+            "- get_all_choices(prev_arrow, next_arrow, observe)",
+            "- drag(start, end)",
+            "- slide_x(handle, direction, observe_frame)",
+            "- slide_y(handle, direction, observe_frame)",
+            "- explore(grid)",
+            "- select(choice)",
+            "- point(to)",
+            "- enter(field, text)",
+            "- draw(path)",
+        ]
+    )
+    vision_tools = "\n".join(
+        [
+            "- mark(images, object)",
+            "- focus(image, description)",
+            "- ask(images, question, answer_type)",
+            "- compare(images, task_objective, reference)",
+            "- rank(images, task_objective)",
+            "- match(e1, e2)",
+        ]
+    )
 
     # Prepare prompt
     prompt = Prompts.get(
@@ -73,31 +63,37 @@ def solution_composition(agent: Agent, frames: list[Frame], objective: str) -> N
         relations="\n".join(relations),
         objective=objective,
         examples="\n\n".join(examples),
-        action_tools=indent("\n\n".join(action_tool_docs.values()), "\t"),
-        vision_tools=indent("\n\n".join(vision_tool_docs.values()), "\t")
+        action_tools=action_tools,
+        vision_tools=vision_tools,
     )
     print(prompt)
 
-    # Request script from agent 
-    try:
-        response, _ = agent(prompt, images, image_captions)
-        script = get_script(response)
-        print(script)
-        execute_script(script, dependencies)
+    # Request JSON program from agent and execute it safely
+    feedback: Exception | None = None
+    for _ in range(4):
+        try:
+            # Keep agent history isolated from tool-calls inside vision_tools
+            agent.reset()
 
-    except Exception as e:
-        feedback = e
+            response, _ = agent(prompt, images, image_captions)
+            data = parse_json_from_response(response)
+            program = validate_stage3(data)
 
-        for _ in range(3):
-            try:
-                print(feedback)
-                response, _ = agent(f"Your code has errors, please fix it.\n{feedback}")
-                script = get_script(response)
-                print(script)
-                execute_script(script, dependencies)
-                break
+            # Vision tools require an injected agent instance.
+            agent.reset()
+            vision_tools.set_agent(agent)
+            execute_stage3_program(all_frames, program, registry=registry)
+            agent.reset()
+            return
 
-            except Exception as e:
-                feedback = e
+        except (ParseError, ValidationError, ToolError, Exception) as exc:
+            feedback = exc
+            prompt = (
+                "Your previous output failed to parse/validate/execute.\n"
+                f"Error: {exc}\n\n"
+                "Please output ONLY valid JSON that matches the required schema.\n"
+                "Do not include markdown fences or any extra text."
+            )
 
     agent.reset()
+    raise feedback if feedback else RuntimeError("Stage 3 failed without a captured error")

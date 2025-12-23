@@ -1,7 +1,16 @@
-# Vision tools to help in reasoning.
-# Enhances visual reasoning ability of VLM agents.
+"""
+Vision tools to help in reasoning.
 
-import os
+Security notes
+- Do not create networked agents at import-time. It makes the package hard to test and
+  can crash when env vars are missing.
+- Do not use `eval()` on model output. That is a Remote Code Execution (RCE) primitive.
+
+The safe runtime path injects the Agent via `set_agent()` and uses `ast.literal_eval()`
+for parsing strictly-limited literal lists.
+"""
+
+import ast
 import re
 import random
 import itertools
@@ -12,17 +21,39 @@ import cv2
 import numpy as np
 import PIL.Image
 from PIL import ImageDraw
-from dotenv import load_dotenv
 from skimage.color import rgb2lab, deltaE_cie76
 
-from halligan.agents import GPTAgent
+from halligan.agents import Agent
 from halligan.models import Detector
 from halligan.utils.toolkit import Toolkit
 from halligan.utils.layout import Frame, Element, Point
 
 
-load_dotenv()
-agent = GPTAgent(api_key=os.getenv("OPENAI_API_KEY"))
+_agent: Agent | None = None
+
+
+def set_agent(agent: Agent) -> None:
+    """Inject the VLM agent used by vision tools (required for ask/rank/compare)."""
+    global _agent
+    _agent = agent
+
+
+def _require_agent() -> Agent:
+    if _agent is None:
+        raise RuntimeError("Vision tools agent is not set. Call `halligan.utils.vision_tools.set_agent(agent)` first.")
+    return _agent
+
+
+def _safe_literal_list(text: str) -> list[Any]:
+    """
+    Safely parse a Python literal list from model output.
+
+    Only list literals are accepted.
+    """
+    value = ast.literal_eval(text)
+    if not isinstance(value, list):
+        raise ValueError("Expected a list literal")
+    return value
 
 
 def mark(images: list[PIL.Image.Image], object: str) -> list[PIL.Image.Image]:
@@ -103,11 +134,12 @@ def ask(images: list[PIL.Image.Image], question: str, answer_type: str) -> list[
         f"{hint}"
     )
     image_captions = [f"Image {i}" for i in range(len(images))]
+    agent = _require_agent()
     response, _ = agent(prompt, images, image_captions)
     agent.reset()
     match = re.search(answer_pattern, response)
     if match:
-        matches = eval(match.group(2))
+        matches = _safe_literal_list(match.group(2))
         if "point to the letter" in question.lower(): matches = [7]
         if "point to the object directly below the letter" in question.lower(): matches = [11]
     else:
@@ -141,17 +173,38 @@ def rank(images: list[PIL.Image.Image], task_objective: str) -> list[str]:
         traverse(root)
         return result
     
-    def get_top_rank(prompt, batch_image, batch_captions):
+    def get_top_rank(prompt: str, batch: list[Node], batch_image: list[PIL.Image.Image], batch_captions: list[str]) -> Node:
         # Get ranking
+        agent = _require_agent()
         response, _ = agent(prompt, batch_image, batch_captions)
-        #agent.reset()
-        match = re.search(r'rank\((ids=)?(\[[\d, ]+\])\)', response)
+        match = re.search(r"rank\((ids=)?(\[[\d, ]+\])\)", response)
 
-        print(response)
+        ranking: list[int]
+        if match:
+            try:
+                raw = _safe_literal_list(match.group(2))
+                ranking = [int(x) for x in raw]
+            except Exception:
+                ranking = []
+        else:
+            ranking = []
 
-        # Get best node and the rest of the nodes
-        ranking = eval(match.group(2)) if match else random.sample(list(range(len(batch))), len(batch))
-        if min(ranking) != 0: ranking = [i - 1 for i in ranking]
+        # Fallback: random permutation
+        if not ranking:
+            ranking = random.sample(list(range(len(batch))), len(batch))
+
+        # Allow both 0-indexed and 1-indexed rankings
+        if min(ranking) == 1:
+            ranking = [i - 1 for i in ranking]
+        elif min(ranking) != 0:
+            ranking = [max(i - 1, 0) for i in ranking]
+
+        # Clamp and de-dup indices to avoid crashes
+        seen = set()
+        ranking = [i for i in ranking if 0 <= i < len(batch) and not (i in seen or seen.add(i))]
+        if not ranking:
+            ranking = list(range(len(batch)))
+
         best_id = batch[ranking[0]].id
         best_node = Node(best_id)
         best_node.children = [batch[i] for i in ranking]
@@ -160,8 +213,6 @@ def rank(images: list[PIL.Image.Image], task_objective: str) -> list[str]:
         return best_node
 
     # To prevent agent from being overwhelmed, batch the input images
-
-    print("all images", len(images))
 
     batch_size = 10
     nodes = [Node(i) for i in range(len(images))]
@@ -193,8 +244,6 @@ def rank(images: list[PIL.Image.Image], task_objective: str) -> list[str]:
     while True:
         next_batch = []
 
-        print(next_batch)
-
         for batch in batches:
             # Prepare input
             prompt = (
@@ -205,7 +254,7 @@ def rank(images: list[PIL.Image.Image], task_objective: str) -> list[str]:
             )
             batch_captions = [f"Image {i}" for i in range(len(batch))]
             batch_image = [images[node.id] for node in batch]
-            best_node = get_top_rank(prompt, batch_image, batch_captions)
+            best_node = get_top_rank(prompt, batch, batch_image, batch_captions)
             next_batch.append(best_node)
 
         if len(next_batch) == 1: 
@@ -265,12 +314,13 @@ def compare(images: list[PIL.Image.Image], task_objective: str, reference: PIL.I
     )
 
     images = [reference] + images
-    image_captions = ["Reference"] + [f"Item {i}" for i in range(len(images))]
+    image_captions = ["Reference"] + [f"Item {i}" for i in range(len(images) - 1)]
+    agent = _require_agent()
     response, _ = agent(prompt, images, image_captions)
 
     agent.reset()
     match = re.search(answer_pattern, response)
-    matches = eval(match.group(2)) if match else [False] * (len(images) - 1)
+    matches = _safe_literal_list(match.group(2)) if match else [False] * (len(images) - 1)
     return matches
 
 

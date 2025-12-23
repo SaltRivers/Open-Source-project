@@ -12,6 +12,8 @@ from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, Page
 
 import halligan.utils.action_tools as action_tools
+from halligan.runtime.config import RuntimeConfig
+from halligan.runtime.errors import UnsafeTargetError
 import halligan.utils.examples as Examples
 import halligan.prompts as Prompts
 
@@ -50,6 +52,28 @@ CACHE_PATH = os.path.join(BASE_PATH, "cache")
 BROWSER_URL = os.getenv("BROWSER_URL")
 BENCHMARK_URL = os.getenv("BENCHMARK_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+
+def validate_environment() -> None:
+    """Ensure required environment variables are present and safe before running generation."""
+    errors: list[str] = []
+
+    try:
+        RuntimeConfig.from_env().validate()
+    except UnsafeTargetError as exc:
+        errors.append(str(exc))
+
+    if not BROWSER_URL:
+        errors.append("Missing `BROWSER_URL` (Playwright websocket endpoint).")
+    if not BENCHMARK_URL:
+        errors.append("Missing `BENCHMARK_URL` (benchmark server base URL).")
+    if not OPENAI_API_KEY:
+        errors.append("Missing `OPENAI_API_KEY`.")
+
+    if errors:
+        for problem in errors:
+            logger.error(problem)
+        raise SystemExit(1)
 
 
 def prepare_captcha(captcha_type: str, page: Page):
@@ -164,6 +188,8 @@ def generate_script(captcha_type: str, id: int, region: dict):
 
 
 for i, (captcha_type, sample_info) in enumerate(SAMPLES.items()):
+    if i == 0:
+        validate_environment()
     logger.info(f"Generating script for CAPTCHA ({i+1} out of {len(SAMPLES)}): {captcha_type}")
 
     sample_id = sample_info["id"]
