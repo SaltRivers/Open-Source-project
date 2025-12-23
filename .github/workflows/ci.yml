@@ -98,9 +98,8 @@ jobs:
 
   integration:
     if: >-
-      ${{ inputs.run_integration == 'true' ||
-          (github.event_name == 'push' &&
-           needs.lint-and-test.outputs.integration == 'true') ||
+      ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.run_integration == 'true') ||
+          (github.event_name == 'push' && needs.lint-and-test.outputs.integration == 'true') ||
           (github.event_name == 'pull_request' &&
            (contains(github.event.pull_request.labels.*.name, 'run-integration') ||
             needs.lint-and-test.outputs.integration == 'true')) }}
