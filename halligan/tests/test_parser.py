@@ -13,12 +13,12 @@ def test_parse_json_direct():
 
 
 def test_parse_json_fenced():
-    data = parse_json_from_response("```json\n{\"a\": 1}\n```")
+    data = parse_json_from_response('```json\n{"a": 1}\n```')
     assert data == {"a": 1}
 
 
 def test_parse_json_extracted():
-    data = parse_json_from_response("prefix\n{\"a\": 1}\nsuffix")
+    data = parse_json_from_response('prefix\n{"a": 1}\nsuffix')
     assert data == {"a": 1}
 
 
@@ -47,4 +47,3 @@ def test_validate_stage1_length_mismatch():
     }
     with pytest.raises(ValidationError):
         validate_stage1(payload, frames=2)
-

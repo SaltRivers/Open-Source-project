@@ -3,10 +3,10 @@ You are given a list of frames, their descriptions, relationships between frames
 Descriptions:
 ${descriptions}
 
-Relations: 
+Relations:
 ${relations}
 
-Objective: 
+Objective:
 ${objective}
 
 Return a single JSON object that identifies all element/frame-level interactables.

@@ -1,12 +1,11 @@
 import halligan.prompts as Prompts
 from halligan.agents import Agent
-from halligan.utils.layout import Frame
-from halligan.utils.constants import Stage
-from halligan.utils.logger import Trace
+from halligan.runtime.errors import ParseError, ValidationError
 from halligan.runtime.parser import parse_json_from_response
 from halligan.runtime.schemas import validate_stage1
-from halligan.runtime.errors import ParseError, ValidationError
-
+from halligan.utils.constants import Stage
+from halligan.utils.layout import Frame
+from halligan.utils.logger import Trace
 
 stage = Stage.OBJECTIVE_IDENTIFICATION
 
@@ -20,15 +19,12 @@ def objective_identification(agent: Agent, frames: list[Frame]) -> str:
     Updates:
         Frame.description
         Frame.relations
-    
+
     Returns:
         objective (str): The inferred task objective.
     """
     # Prepare prompt
-    prompt = Prompts.get(
-        stage=stage,
-        frames=len(frames)
-    )
+    prompt = Prompts.get(stage=stage, frames=len(frames))
     print(prompt)
 
     # Request structured JSON from agent

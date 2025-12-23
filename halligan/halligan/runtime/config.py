@@ -6,7 +6,6 @@ from urllib.parse import urlparse
 
 from halligan.runtime.errors import ConfigError, UnsafeTargetError
 
-
 _DEFAULT_ALLOWED_BENCHMARK_HOSTS = {
     "localhost",
     "127.0.0.1",
@@ -102,4 +101,3 @@ class RuntimeConfig:
 
         if missing:
             raise ConfigError(f"Missing required environment variables: {', '.join(missing)}")
-

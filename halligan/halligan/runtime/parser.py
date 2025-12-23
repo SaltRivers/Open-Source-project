@@ -6,7 +6,6 @@ from typing import Any
 
 from halligan.runtime.errors import ParseError
 
-
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 
 
@@ -52,4 +51,3 @@ def parse_json_from_response(text: str) -> Any:
             raise ParseError(f"Failed to parse extracted JSON: {exc}") from exc
 
     raise ParseError("No JSON object found in response")
-

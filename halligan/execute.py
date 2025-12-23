@@ -1,30 +1,30 @@
+import importlib.util
+import logging
 import os
 import sys
-import logging
 import traceback
-import importlib.util
-from io import BytesIO
 from datetime import datetime
+from io import BytesIO
 
-from PIL import Image
 from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright, Page
+from PIL import Image
+from playwright.sync_api import Page, sync_playwright
 
 import halligan.utils.action_tools as action_tools
+from halligan.agents import GPTAgent
 from halligan.runtime.config import RuntimeConfig
 from halligan.runtime.errors import UnsafeTargetError
-from samples import SAMPLES
-from halligan.agents import GPTAgent
-from halligan.utils.logger import Trace
-from halligan.utils.layout import get_frames, get_observation
 from halligan.stages.stage1 import objective_identification
 from halligan.stages.stage2 import structure_abstraction
 from halligan.stages.stage3 import solution_composition
+from halligan.utils.layout import get_frames, get_observation
+from halligan.utils.logger import Trace
+from samples import SAMPLES
 
 # Setup logging
-timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 file_handler = logging.FileHandler(f"agent-{timestamp}.log")
 file_handler.setFormatter(formatter)
 console_handler = logging.StreamHandler()
@@ -58,32 +58,22 @@ def validate_environment() -> None:
 
     if not BROWSER_URL:
         errors.append(
-            "Missing `BROWSER_URL`. Provide a Playwright websocket endpoint, for example "
-            "`ws://localhost:3000/`."
+            "Missing `BROWSER_URL`. Provide a Playwright websocket endpoint, for example " "`ws://localhost:3000/`."
         )
     elif not BROWSER_URL.startswith(("ws://", "wss://")):
-        errors.append(
-            f"`BROWSER_URL` should start with `ws://` or `wss://` (current: {BROWSER_URL!r})."
-        )
+        errors.append(f"`BROWSER_URL` should start with `ws://` or `wss://` (current: {BROWSER_URL!r}).")
 
     if not BENCHMARK_URL:
         errors.append(
-            "Missing `BENCHMARK_URL`. Set it to the benchmark server base URL, such as "
-            "`http://localhost:3334`."
+            "Missing `BENCHMARK_URL`. Set it to the benchmark server base URL, such as " "`http://localhost:3334`."
         )
     elif not BENCHMARK_URL.startswith(("http://", "https://")):
-        errors.append(
-            f"`BENCHMARK_URL` should start with `http://` or `https://` (current: {BENCHMARK_URL!r})."
-        )
+        errors.append(f"`BENCHMARK_URL` should start with `http://` or `https://` (current: {BENCHMARK_URL!r}).")
 
     if not OPENAI_API_KEY:
-        errors.append(
-            "Missing `OPENAI_API_KEY`. Export a valid OpenAI API key or populate it in your `.env`."
-        )
+        errors.append("Missing `OPENAI_API_KEY`. Export a valid OpenAI API key or populate it in your `.env`.")
     elif not OPENAI_API_KEY.startswith("sk-"):
-        errors.append(
-            "`OPENAI_API_KEY` does not look like a standard OpenAI key (expected prefix `sk-`)."
-        )
+        errors.append("`OPENAI_API_KEY` does not look like a standard OpenAI key (expected prefix `sk-`).")
 
     if errors:
         logger.error("Environment validation failed:")
@@ -146,18 +136,21 @@ def solve_captcha(captcha_type: str, id: int, region: dict) -> bool:
 
             x, y = region["x"], region["y"]
             captcha = Image.open(BytesIO(page.screenshot(clip=region)))
-    
+
             trace_path = os.path.join("results", "execute", f"{captcha_type.replace("/", "_")}.ipynb")
             Trace.start(captcha, trace_path)
 
             @Trace.section("Objective Identification")
-            def stage1(frames): return cache.stage1(frames)
+            def stage1(frames):
+                return cache.stage1(frames)
 
             @Trace.section("Structure Abstraction")
-            def stage2(frames): return cache.stage2(frames)
+            def stage2(frames):
+                return cache.stage2(frames)
 
             @Trace.section("Solution Composition")
-            def stage3(frames): return cache.stage3(frames)
+            def stage3(frames):
+                return cache.stage3(frames)
 
             frames = get_frames(x, y, captcha)
 
@@ -172,7 +165,7 @@ def solve_captcha(captcha_type: str, id: int, region: dict) -> bool:
                 stage2(frames)
             else:
                 structure_abstraction(agent, frames, objective)
-            
+
             agent.reset()
 
             with page.expect_response(lambda r: "/submit" in r.url, timeout=60000) as response_info:
@@ -181,23 +174,24 @@ def solve_captcha(captcha_type: str, id: int, region: dict) -> bool:
                     stage3(frames)
                 else:
                     solution_composition(agent, frames, objective)
-                
+
             response = response_info.value
             data: dict = response.json()
             solved = data.get("solved", None)
 
             agent.reset()
-            
+
         except Exception as e:
             logger.error(f"Error: {e}")
             logger.error(traceback.format_exc())
 
         finally:
             Trace.stop()
-            if not page.is_closed(): page.close()
+            if not page.is_closed():
+                page.close()
             context.close()
             browser.close()
-    
+
     return solved
 
 

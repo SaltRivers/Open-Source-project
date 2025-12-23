@@ -1,33 +1,32 @@
 import halligan.prompts as Prompts
 import halligan.utils.examples as Examples
 from halligan.agents import Agent
-from halligan.utils.logger import Trace
-from halligan.utils.constants import Stage
-from halligan.utils.constants import InteractableElement
-from halligan.utils.layout import Frame, get_observation
-from halligan.runtime.parser import parse_json_from_response
-from halligan.runtime.schemas import validate_stage3
-from halligan.runtime.registry import build_default_registry
+from halligan.runtime.errors import ParseError, ToolError, ValidationError
 from halligan.runtime.executor import execute_stage3_program
-from halligan.runtime.errors import ParseError, ValidationError, ToolError
-import halligan.utils.vision_tools as vision_tools
-
+from halligan.runtime.parser import parse_json_from_response
+from halligan.runtime.registry import build_default_registry
+from halligan.runtime.schemas import validate_stage3
+from halligan.utils.constants import InteractableElement, Stage
+from halligan.utils.layout import Frame, get_observation
+from halligan.utils.logger import Trace
 
 stage = Stage.SOLUTION_COMPOSITION
 
 
 @Trace.section("Solution Composition")
-def solution_composition(agent: Agent, frames: list[Frame], objective: str) -> None: 
+def solution_composition(agent: Agent, frames: list[Frame], objective: str) -> None:
     """
     Agent composes a Python executable solution using vision and action tools.
     """
     examples = []
     all_frames, images, image_captions, descriptions, relations, interactable_types = get_observation(frames)
-    
+
     for interactable_type in interactable_types:
         # Prepare in-context learning examples
-        if interactable_type == InteractableElement.NEXT.name: continue
-        else: examples.append(Examples.get(interactable_type))
+        if interactable_type == InteractableElement.NEXT.name:
+            continue
+        else:
+            examples.append(Examples.get(interactable_type))
 
     # Tools exposed to the JSON program (functions only)
     registry = build_default_registry()

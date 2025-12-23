@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from halligan.runtime.executor import apply_stage2_plan, execute_stage3_program
 from halligan.runtime.errors import ToolError, ValidationError
+from halligan.runtime.executor import apply_stage2_plan, execute_stage3_program
 from halligan.runtime.registry import ToolRegistry
 from halligan.runtime.schemas import Stage2Action, Stage2Plan, Stage3Program
 

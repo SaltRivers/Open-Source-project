@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal
 
 from halligan.runtime.errors import ValidationError
 from halligan.utils.constants import InteractableElement, InteractableFrame
-
 
 # -----------------------------
 # Helpers
@@ -82,9 +81,7 @@ def validate_stage1(data: Any, *, frames: int) -> Stage1Result:
 
     descriptions = _require_list(obj.get("descriptions"), "$.descriptions")
     if len(descriptions) != frames:
-        raise ValidationError(
-            f"$.descriptions length mismatch: expected {frames}, got {len(descriptions)}"
-        )
+        raise ValidationError(f"$.descriptions length mismatch: expected {frames}, got {len(descriptions)}")
     desc_out: list[str] = []
     for i, d in enumerate(descriptions):
         desc_out.append(_require_str(d, f"$.descriptions[{i}]").strip())
@@ -172,7 +169,9 @@ def validate_stage2(data: Any, *, frames: int) -> Stage2Plan:
             _require_one_of(mark_as, _ELEMENT_INTERACTABLES, f"$.actions[{i}].mark_as")
             if tiles <= 0:
                 raise ValidationError(f"$.actions[{i}].tiles must be positive")
-            actions.append(Stage2Action(type="grid_frame", payload={"frame": frame_id, "tiles": tiles, "mark_as": mark_as}))
+            actions.append(
+                Stage2Action(type="grid_frame", payload={"frame": frame_id, "tiles": tiles, "mark_as": mark_as})
+            )
 
         elif action_type == "get_element":
             position = _require_str(action_obj.get("position"), f"$.actions[{i}].position")
@@ -223,4 +222,3 @@ def validate_stage3(data: Any) -> Stage3Program:
         _require_dict(step, f"$.steps[{i}]")
         _require_str(step.get("op"), f"$.steps[{i}].op")
     return Stage3Program(steps=steps)  # type: ignore[arg-type]
-

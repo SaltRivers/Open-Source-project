@@ -15,22 +15,22 @@ _import_errors = []
 # Strategy 1: Try relative imports (most common)
 try:
     from .clip import CLIP
-    from .segmenter import Segmenter
     from .detector import Detector
+    from .segmenter import Segmenter
 except ImportError as e1:
     _import_errors.append(f"Relative import failed: {e1}")
     # Strategy 2: Try absolute imports from same directory
     try:
         from clip import CLIP
-        from segmenter import Segmenter
         from detector import Detector
+        from segmenter import Segmenter
     except ImportError as e2:
         _import_errors.append(f"Absolute import failed: {e2}")
         # Strategy 3: Try alternative naming (lowercase/uppercase variations)
         try:
             from .CLIP import CLIP
-            from .Segmenter import Segmenter
             from .Detector import Detector
+            from .Segmenter import Segmenter
         except ImportError as e3:
             _import_errors.append(f"Alternative import failed: {e3}")
             # All import strategies failed
@@ -44,4 +44,3 @@ except ImportError as e1:
             ) from e3
 
 __all__ = ["CLIP", "Segmenter", "Detector"]
-

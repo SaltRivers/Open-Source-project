@@ -39,12 +39,12 @@ pre-commit = ">=3.7.0,<4"
 # CUDA feature is optional and only used when explicitly enabled
 # [tool.pixi.feature.cuda]
 # system-requirements = {cuda = "12.1"}
-# 
+#
 # [tool.pixi.feature.cuda.dependencies]
 # faiss-gpu = ">=1.9.0,<2"
 # pytorch-cuda = "==12.1"
 
- 
+
 
 [tool.black]
 line-length = 120
@@ -60,7 +60,7 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
+select = ["E", "F", "W"]
 ignore = ["E701", "E501"]
 per-file-ignores = {"**/__init__.py" = ["F401"]}
 

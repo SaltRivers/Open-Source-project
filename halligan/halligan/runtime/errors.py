@@ -23,4 +23,3 @@ class UnsafeTargetError(HalliganError):
 
 class ToolError(HalliganError):
     """Raised when a tool invocation fails or is invalid."""
-

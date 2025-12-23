@@ -15,4 +15,3 @@ junit-*.xml
 # Benchmarks and temp files
 benchmark/**/*.log
 */temp.txt
-

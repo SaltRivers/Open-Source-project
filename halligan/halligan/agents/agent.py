@@ -1,13 +1,12 @@
-import io
 import base64
+import io
 from abc import ABC, abstractmethod
-from typing import Optional, TypeAlias, Any
+from typing import Any, Optional, TypeAlias
 
 import openai
 from PIL import Image
 
 from halligan.utils.logger import Trace
-
 
 Metadata: TypeAlias = dict[str, Any]
 
@@ -15,9 +14,7 @@ Metadata: TypeAlias = dict[str, Any]
 class Agent(ABC):
     @abstractmethod
     def __call__(
-        self, 
-        prompt: str, images: Optional[list[Image.Image]] = None, 
-        image_captions: Optional[list[str]] = None
+        self, prompt: str, images: Optional[list[Image.Image]] = None, image_captions: Optional[list[str]] = None
     ) -> tuple[str, Metadata]:
         pass
 
@@ -42,11 +39,11 @@ class GPTAgent(Agent):
 
     def reset(self) -> None:
         self.history = []
- 
+
     @Trace.agent()
     def __call__(
-        self, 
-        prompt: str, 
+        self,
+        prompt: str,
         images: Optional[list[Image.Image]] = None,
         image_captions: Optional[list[str]] = None,
     ) -> tuple[str, Metadata]:
@@ -60,23 +57,13 @@ class GPTAgent(Agent):
             buffer = io.BytesIO()
             image.save(buffer, format="JPEG")
             image_b64 = base64.b64encode(buffer.getvalue()).decode("ascii")
-            user_prompt.append({
-                "type": "text",
-                "text": image_caption
-            })
-            user_prompt.append({
-                "type": "image_url",
-                "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
-            })
+            user_prompt.append({"type": "text", "text": image_caption})
+            user_prompt.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}})
 
         self.history.append({"role": "user", "content": user_prompt})
 
         response = self.client.chat.completions.create(
-            model=self.model,
-            messages=self.history,
-            max_tokens=1024,
-            temperature=0,
-            top_p=1
+            model=self.model, messages=self.history, max_tokens=1024, temperature=0, top_p=1
         )
 
         content = response.choices[0].message.content
@@ -84,9 +71,9 @@ class GPTAgent(Agent):
             "fingerprint": response.system_fingerprint,
             "total_tokens": response.usage.total_tokens,
             "prompt_tokens": response.usage.prompt_tokens,
-            "completion_tokens": response.usage.completion_tokens
+            "completion_tokens": response.usage.completion_tokens,
         }
 
         self.history.append({"role": "assistant", "content": content})
-        
+
         return content, metadata

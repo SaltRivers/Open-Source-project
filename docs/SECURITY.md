@@ -61,4 +61,3 @@ rg -n "\\bexec\\(|\\beval\\(" halligan/halligan
 - 若你要在受控环境中进行研究复现，请确保：
   - 在隔离环境运行（容器/沙盒/最小权限账号）。
   - 仅连接本地 benchmark 服务。
-

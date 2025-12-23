@@ -9,7 +9,6 @@ from playwright.sync_api import sync_playwright
 
 from samples import SAMPLES
 
-
 # Load environment variables
 load_dotenv()
 BROWSER_URL = os.getenv("BROWSER_URL")
@@ -32,7 +31,7 @@ def test_smoke_samples():
 @pytest.mark.integration
 def test_browser():
     """
-    Verify that a connection can be successfully established to a 
+    Verify that a connection can be successfully established to a
     containerized Playwright browser via its WebSocket endpoint.
     """
     if not BROWSER_URL:
@@ -50,7 +49,7 @@ def test_browser():
 @pytest.mark.integration
 def test_benchmark():
     """
-    Verify that the containerized Playwright browser can access and load 
+    Verify that the containerized Playwright browser can access and load
     the benchmark application successfully.
     """
     if not BROWSER_URL or not BENCHMARK_URL:
@@ -105,11 +104,11 @@ def test_captcha_endpoints_http():
 @pytest.mark.parametrize("captcha, sample_id", test_captcha_params)
 def test_captchas(captcha, sample_id):
     """
-    Verify that all CAPTCHA samples in the benchmark can be accessed and 
+    Verify that all CAPTCHA samples in the benchmark can be accessed and
     loaded successfully.
 
-    The benchmark includes 26 different types of CAPTCHAs, each served via 
-    a distinct endpoint. This test ensures that each endpoint is reachable 
+    The benchmark includes 26 different types of CAPTCHAs, each served via
+    a distinct endpoint. This test ensures that each endpoint is reachable
     and returns the expected content.
     """
     if not BROWSER_URL or not BENCHMARK_URL:
@@ -153,11 +152,14 @@ def test_captchas(captcha, sample_id):
                     iframe_snapshot = frame.locator("body").aria_snapshot()
                     full_snapshot.append(iframe_snapshot)
 
-            assert SequenceMatcher(
-                None,
-                "\n".join(full_snapshot),
-                open(f"./snapshots/{captcha.replace("/", "_")}.txt").read(),
-            ).ratio() > 0.5
+            assert (
+                SequenceMatcher(
+                    None,
+                    "\n".join(full_snapshot),
+                    open(f"./snapshots/{captcha.replace("/", "_")}.txt").read(),
+                ).ratio()
+                > 0.5
+            )
         finally:
             try:
                 browser.close()
@@ -173,7 +175,7 @@ def test_models_initialize_integration():
     Note: GPTAgent construction is covered by a unit test (does not require network).
     """
     try:
-        from halligan.models import CLIP, Segmenter, Detector
+        from halligan.models import CLIP, Detector, Segmenter
     except Exception:
         pytest.skip("halligan.models components (CLIP/Segmenter/Detector) are not available; skipping.")
 

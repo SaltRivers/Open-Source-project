@@ -1,24 +1,23 @@
 import halligan.prompts as Prompts
 from halligan.agents import Agent
+from halligan.runtime.errors import ParseError, ValidationError
+from halligan.runtime.executor import apply_stage2_plan
+from halligan.runtime.parser import parse_json_from_response
+from halligan.runtime.schemas import validate_stage2
 from halligan.utils.constants import Stage
 from halligan.utils.layout import Frame, get_observation
 from halligan.utils.logger import Trace
-from halligan.runtime.parser import parse_json_from_response
-from halligan.runtime.schemas import validate_stage2
-from halligan.runtime.executor import apply_stage2_plan
-from halligan.runtime.errors import ParseError, ValidationError
-
 
 stage = Stage.STRUCTURE_ABSTRACTION
 
 
 @Trace.section("Structure Abstraction")
-def structure_abstraction(agent: Agent, frames: list[Frame], objective: str) -> None: 
+def structure_abstraction(agent: Agent, frames: list[Frame], objective: str) -> None:
     """
-    Instruct the agent to annotate interactable Frames and Elements. 
+    Instruct the agent to annotate interactable Frames and Elements.
     Frames can be further divided into subframes.
     The agent can segment specific Elements or extract a grid of evenly-sized Elements from Frames.
-    
+
     Returns:
         None: all annotations are stored in the Frame instances (e.g., Frame.interactables).
     """

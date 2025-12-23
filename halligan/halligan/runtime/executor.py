@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from halligan.runtime.errors import ToolError, ValidationError
 from halligan.runtime.registry import ToolRegistry
@@ -79,8 +79,7 @@ def apply_stage2_plan(frames: list["Frame"], plan: Stage2Plan) -> None:
     non_next = {t for t in types if t != "NEXT"}
     if len(non_next) != 1:
         raise ValidationError(
-            "Stage 2 must result in exactly one non-NEXT interactable type "
-            f"(found: {sorted(non_next)})"
+            "Stage 2 must result in exactly one non-NEXT interactable type " f"(found: {sorted(non_next)})"
         )
     if next_count > 1:
         raise ValidationError("Stage 2 must have at most one NEXT interactable")
