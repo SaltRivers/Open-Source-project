@@ -69,7 +69,18 @@ jobs:
         run: pixi run precommit
 
       - name: Ensure no unstaged changes after formatting
-        run: git diff --exit-code
+        run: |
+          set -euo pipefail
+          # `pre-commit` may auto-fix formatting. This check ensures we don't silently
+          # leave the repo dirty in CI (developers must commit formatting changes).
+          if ! git diff --quiet; then
+            echo "Unstaged changes detected after formatting." >&2
+            echo "Please run pre-commit locally and commit the changes." >&2
+            git status --porcelain=v1 || true
+            # Keep logs small: print a stat summary instead of full diffs.
+            git --no-pager diff --stat || true
+            exit 1
+          fi
 
       - name: Run unit tests (skip integration) with JUnit
         working-directory: halligan
